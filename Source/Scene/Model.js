@@ -66,6 +66,7 @@ define([
         './modelMaterialsCommon',
         './ModelMesh',
         './ModelNode',
+        './pbrPipeline',
         './SceneMode',
         './ShadowMode'
     ], function(
@@ -135,6 +136,7 @@ define([
         modelMaterialsCommon,
         ModelMesh,
         ModelNode,
+        pbrPipeline,
         SceneMode,
         ShadowMode) {
     'use strict';
@@ -242,7 +244,7 @@ define([
     // Note that this is a global cache, compared to renderer resources, which
     // are cached per context.
     function CachedGltf(options) {
-        this._gltf = modelMaterialsCommon(gltfDefaults(options.gltf));
+        this._gltf = pbrPipeline(gltfDefaults(options.gltf));
         this._bgltf = options.bgltf;
         this.ready = options.ready;
         this.modelsToLoad = [];
@@ -252,7 +254,7 @@ define([
     defineProperties(CachedGltf.prototype, {
         gltf : {
             set : function(value) {
-                this._gltf = modelMaterialsCommon(gltfDefaults(value));
+                this._gltf = pbrPipeline(gltfDefaults(value));
             },
 
             get : function() {
