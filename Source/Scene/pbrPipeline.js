@@ -345,123 +345,82 @@ define([
             vertexShader += 'attribute vec4 a_weight;\n';
         }
 
-        var hasSpecular = hasNormals && ((lightingModel === 'BLINN') || (lightingModel === 'PHONG')) &&
-                          defined(techniqueParameters.specular) && defined(techniqueParameters.shininess);
-
-        // Generate lighting code blocks
-        var hasNonAmbientLights = false;
-        var hasAmbientLights = false;
-        var fragmentLightingBlock = '';
-        for (var lightName in lights) {
-            if (lights.hasOwnProperty(lightName)) {
-                var light = lights[lightName];
-                var lightType = light.type.toLowerCase();
-                var lightBaseName = light.baseName;
-                fragmentLightingBlock += '  {\n';
-                var lightColorName = 'u_' + lightBaseName + 'Color';
-                var varyingDirectionName;
-                var varyingPositionName;
-                if(lightType === 'ambient') {
-                    hasAmbientLights = true;
-                    fragmentLightingBlock += '    ambientLight += ' + lightColorName + ';\n';
-                }
-                else if (hasNormals) {
-                    hasNonAmbientLights = true;
-                    varyingDirectionName = 'v_' + lightBaseName + 'Direction';
-                    varyingPositionName = 'v_' + lightBaseName + 'Position';
-
-                    if (lightType !== 'point') {
-                        vertexShader += 'varying vec3 ' + varyingDirectionName + ';\n';
-                        fragmentShader += 'varying vec3 ' + varyingDirectionName + ';\n';
-
-                        vertexShaderMain += '  ' + varyingDirectionName + ' = mat3(u_' + lightBaseName + 'Transform) * vec3(0.,0.,1.);\n';
-                        if (lightType === 'directional') {
-                            fragmentLightingBlock += '    vec3 l = normalize(' + varyingDirectionName + ');\n';
-                        }
-                    }
-
-                    if (lightType !== 'directional') {
-                        vertexShader += 'varying vec3 ' + varyingPositionName + ';\n';
-                        fragmentShader += 'varying vec3 ' + varyingPositionName + ';\n';
-
-                        vertexShaderMain += '  ' + varyingPositionName + ' = u_' + lightBaseName + 'Transform[3].xyz;\n';
-                        fragmentLightingBlock += '    vec3 VP = ' + varyingPositionName + ' - v_positionEC;\n';
-                        fragmentLightingBlock += '    vec3 l = normalize(VP);\n';
-                        fragmentLightingBlock += '    float range = length(VP);\n';
-                        fragmentLightingBlock += '    float attenuation = 1.0 / (u_' + lightBaseName + 'Attenuation.x + ';
-                        fragmentLightingBlock += '(u_' + lightBaseName + 'Attenuation.y * range) + ';
-                        fragmentLightingBlock += '(u_' + lightBaseName + 'Attenuation.z * range * range));\n';
-                    }
-                    else {
-                        fragmentLightingBlock += '    float attenuation = 1.0;\n';
-                    }
-
-                    if (lightType === 'spot') {
-                        fragmentLightingBlock += '    float spotDot = dot(l, normalize(' + varyingDirectionName + '));\n';
-                        fragmentLightingBlock += '    if (spotDot < cos(u_' + lightBaseName + 'FallOff.x * 0.5))\n';
-                        fragmentLightingBlock += '    {\n';
-                        fragmentLightingBlock += '      attenuation = 0.0;\n';
-                        fragmentLightingBlock += '    }\n';
-                        fragmentLightingBlock += '    else\n';
-                        fragmentLightingBlock += '    {\n';
-                        fragmentLightingBlock += '        attenuation *= max(0.0, pow(spotDot, u_' + lightBaseName + 'FallOff.y));\n';
-                        fragmentLightingBlock += '    }\n';
-                    }
-
-                    fragmentLightingBlock += '    diffuseLight += ' + lightColorName + '* max(dot(normal,l), 0.) * attenuation;\n';
-
-                    if (hasSpecular) {
-                        if (lightingModel === 'BLINN') {
-                            fragmentLightingBlock += '    vec3 h = normalize(l + viewDir);\n';
-                            fragmentLightingBlock += '    float specularIntensity = max(0., pow(max(dot(normal, h), 0.), u_shininess)) * attenuation;\n';
-                        }
-                        else { // PHONG
-                            fragmentLightingBlock += '    vec3 reflectDir = reflect(-l, normal);\n';
-                            fragmentLightingBlock += '    float specularIntensity = max(0., pow(max(dot(reflectDir, viewDir), 0.), u_shininess)) * attenuation;\n';
-                        }
-                        fragmentLightingBlock += '    specularLight += ' + lightColorName + ' * specularIntensity;\n';
-                    }
-                }
-                fragmentLightingBlock += '  }\n';
-            }
-        }
-
-        if (!hasAmbientLights) {
-            // Add an ambient light if we don't have one
-            fragmentLightingBlock += '  ambientLight += vec3(0.2, 0.2, 0.2);\n';
-        }
-
-        if (!hasNonAmbientLights && (lightingModel !== 'CONSTANT')) {
-            fragmentLightingBlock += '  vec3 l = normalize(czm_sunDirectionEC);\n';
-            fragmentLightingBlock += '  diffuseLight += vec3(1.0, 1.0, 1.0) * max(dot(normal,l), 0.);\n';
-
-            if (hasSpecular) {
-                if (lightingModel === 'BLINN') {
-                    fragmentLightingBlock += '  vec3 h = normalize(l + viewDir);\n';
-                    fragmentLightingBlock += '  float specularIntensity = max(0., pow(max(dot(normal, h), 0.), u_shininess));\n';
-                }
-                else { // PHONG
-                    fragmentLightingBlock += '  vec3 reflectDir = reflect(-l, normal);\n';
-                    fragmentLightingBlock += '  float specularIntensity = max(0., pow(max(dot(reflectDir, viewDir), 0.), u_shininess));\n';
-                }
-
-                fragmentLightingBlock += '  specularLight += vec3(1.0, 1.0, 1.0) * specularIntensity;\n';
-            }
-        }
-
         vertexShader += 'void main(void) {\n';
         vertexShader += vertexShaderMain;
         vertexShader += '}\n';
 
-        fragmentShader += 'void main(void) {\n';
-        var colorCreationBlock = '  vec3 color = vec3(0.0, 0.0, 0.0);\n';
+        fragmentShader += 'const float M_PI = 3.141592653589793;\n';
+
+        var lambertianDiffuse = '';
+        lambertianDiffuse += 'vec3 lambertianDiffuse(vec3 baseColor) {\n';
+        lambertianDiffuse += '  return baseColor / M_PI;\n';
+        lambertianDiffuse += '}\n\n';
+
+        var fresnelSchlick = '';
+        fresnelSchlick += 'vec3 fresnelSchlick(float metalness, float VdotH) {\n';
+        fresnelSchlick += '  return metalness + (vec3(1.0) - metalness) * pow(1.0 - VdotH, 5.0);\n';
+        fresnelSchlick += '}\n\n';
+
+        var smithVisibilityG1 = '';
+        smithVisibilityG1 += 'float smithVisibilityG1(float NdotV, float roughness) {\n';
+        smithVisibilityG1 += '  float tanSquared = (1.0 - NdotV * NdotV) / max((NdotV * NdotV), 0.00001);\n';
+        smithVisibilityG1 += '  return 2.0 / (1.0 + sqrt(1.0 + roughness * roughness * tanSquared));\n';
+        smithVisibilityG1 += '}\n\n';
+
+        var smithVisibilityGGX = '';
+        smithVisibilityGGX += 'float smithVisibilityGGX(float roughness, float NdotL, float NdotV) {\n';
+        smithVisibilityGGX += '  return smithVisibilityG1(NdotL, roughness) * smithVisibilityG1(NdotV, roughness);\n';
+        smithVisibilityGGX += '}\n\n';
+
+        var GGX = '';
+        GGX += 'float GGX(float roughness, float NdotH) {\n';
+        GGX += '  float roughnessSquared = roughness * roughness;\n';
+        GGX += '  float f = (NdotH * roughnessSquared - NdotH) * NdotH + 1.0;\n';
+        GGX += '  return roughnessSquared / (M_PI * f * f);\n';
+        GGX += '}\n\n';
+
+        fragmentShader += lambertianDiffuse + fresnelSchlick + smithVisibilityG1 + smithVisibilityGGX + GGX;
+
+        var fragmentShaderMain = '';
+        fragmentShaderMain += 'void main(void) {\n';
+        fragmentShaderMain += '  vec3 baseColor = vec3(1.0, 1.0, 1.0);\n';
+        fragmentShaderMain += '  float metalness = 0.5;\n';
+        fragmentShaderMain += '  float roughness = 1.0;\n';
+        fragmentShaderMain += '  vec3 v = -normalize(v_positionEC);\n';
+        fragmentShaderMain += '  vec3 ambientLight = vec3(0.0, 0.0, 0.0);\n';
+
+        // Generate lighting code blocks
+        var fragmentLightingBlock = '';
+        fragmentLightingBlock += '  vec3 lightColor = vec3(1.0, 1.0, 1.0);\n';
+        fragmentLightingBlock += '  vec3 n = v_normal;\n';
+        fragmentLightingBlock += '  vec3 l = normalize(czm_sunDirectionEC);\n';
+        fragmentLightingBlock += '  vec3 h = normalize(v + l);\n';
+        fragmentLightingBlock += '  float NdotL = clamp(dot(n, l), 0.0, 1.0);\n';
+        fragmentLightingBlock += '  float NdotV = clamp(dot(n, v), 0.0, 1.0);\n';
+        fragmentLightingBlock += '  float NdotH = clamp(dot(n, h), 0.0, 1.0);\n';
+        fragmentLightingBlock += '  float LdotH = clamp(dot(l, h), 0.0, 1.0);\n';
+        fragmentLightingBlock += '  float VdotH = clamp(dot(v, h), 0.0, 1.0);\n';
+
+        fragmentLightingBlock += '  vec3 f0 = vec3(0.04);\n';
+        fragmentLightingBlock += '  vec3 diffuseColor = mix(baseColor.rgb * (1.0 - f0), vec3(0.0), metalness);\n';
+        fragmentLightingBlock += '  vec3 specularColor = mix(f0, baseColor, metalness);\n';
+        fragmentLightingBlock += '  float reflectance = max(max(specularColor.r, specularColor.g), specularColor.b);\n';
+
+        fragmentLightingBlock += '  vec3 F = fresnelSchlick(metalness, VdotH);\n';
+        fragmentLightingBlock += '  float G = smithVisibilityGGX(roughness, NdotL, NdotV);\n';
+        fragmentLightingBlock += '  float D = GGX(roughness, NdotH);\n';
+
+        fragmentLightingBlock += '  vec3 diffuseContribution = (1.0 - F) * lambertianDiffuse(baseColor) * NdotL * lightColor;\n';
+        fragmentLightingBlock += '  vec3 specularContribution = M_PI * lightColor * F * G * D / 4.0 * NdotL * NdotV;\n';
+        fragmentLightingBlock += '  vec3 color = diffuseContribution + specularContribution;\n';
+
         if (hasNormals) {
-            fragmentShader += '  vec3 normal = normalize(v_normal);\n';
+            fragmentShaderMain += '  vec3 normal = normalize(v_normal);\n';
             if (khrMaterialsCommon.doubleSided) {
-                fragmentShader += '  if (gl_FrontFacing == false)\n';
-                fragmentShader += '  {\n';
-                fragmentShader += '    normal = -normal;\n';
-                fragmentShader += '  }\n';
+                fragmentShaderMain += '  if (gl_FrontFacing == false)\n';
+                fragmentShaderMain += '  {\n';
+                fragmentShaderMain += '    normal = -normal;\n';
+                fragmentShaderMain += '  }\n';
             }
         }
 
@@ -469,24 +428,12 @@ define([
         if (lightingModel !== 'CONSTANT') {
             if (defined(techniqueParameters.diffuse)) {
                 if (techniqueParameters.diffuse.type === WebGLConstants.SAMPLER_2D) {
-                    fragmentShader += '  vec4 diffuse = texture2D(u_diffuse, ' + v_texcoord + ');\n';
+                    fragmentShaderMain += '  vec4 diffuse = texture2D(u_diffuse, ' + v_texcoord + ');\n';
                 }
                 else {
-                    fragmentShader += '  vec4 diffuse = u_diffuse;\n';
+                    fragmentShaderMain += '  vec4 diffuse = u_diffuse;\n';
                 }
-                fragmentShader += '  vec3 diffuseLight = vec3(0.0, 0.0, 0.0);\n';
-                colorCreationBlock += '  color += diffuse.rgb * diffuseLight;\n';
-            }
-
-            if (hasSpecular) {
-                if (techniqueParameters.specular.type === WebGLConstants.SAMPLER_2D) {
-                    fragmentShader += '  vec3 specular = texture2D(u_specular, ' + v_texcoord + ').rgb;\n';
-                }
-                else {
-                    fragmentShader += '  vec3 specular = u_specular.rgb;\n';
-                }
-                fragmentShader += '  vec3 specularLight = vec3(0.0, 0.0, 0.0);\n';
-                colorCreationBlock += '  color += specular * specularLight;\n';
+                fragmentShaderMain += '  vec3 diffuseLight = vec3(0.0, 0.0, 0.0);\n';
             }
 
             if (defined(techniqueParameters.transparency)) {
@@ -505,39 +452,13 @@ define([
             }
         }
 
-        if (defined(techniqueParameters.emission)) {
-            if (techniqueParameters.emission.type === WebGLConstants.SAMPLER_2D) {
-                fragmentShader += '  vec3 emission = texture2D(u_emission, ' + v_texcoord + ').rgb;\n';
-            }
-            else {
-                fragmentShader += '  vec3 emission = u_emission.rgb;\n';
-            }
-            colorCreationBlock += '  color += emission;\n';
-        }
-
-        if (defined(techniqueParameters.ambient) || (lightingModel !== 'CONSTANT')) {
-            if (defined(techniqueParameters.ambient)) {
-                if (techniqueParameters.ambient.type === WebGLConstants.SAMPLER_2D) {
-                    fragmentShader += '  vec3 ambient = texture2D(u_ambient, ' + v_texcoord + ').rgb;\n';
-                }
-                else {
-                    fragmentShader += '  vec3 ambient = u_ambient.rgb;\n';
-                }
-            }
-            else {
-                fragmentShader += '  vec3 ambient = diffuse.rgb;\n';
-            }
-            colorCreationBlock += '  color += ambient * ambientLight;\n';
-        }
-        fragmentShader += '  vec3 viewDir = -normalize(v_positionEC);\n';
-        fragmentShader += '  vec3 ambientLight = vec3(0.0, 0.0, 0.0);\n';
 
         // Add in light computations
-        fragmentShader += fragmentLightingBlock;
+        fragmentShaderMain += fragmentLightingBlock;
+        fragmentShaderMain += finalColorComputation;
+        fragmentShaderMain += '}\n';
 
-        fragmentShader += colorCreationBlock;
-        fragmentShader += finalColorComputation;
-        fragmentShader += '}\n';
+        fragmentShader += fragmentShaderMain;
 
         var techniqueStates;
         if (khrMaterialsCommon.transparent) {
