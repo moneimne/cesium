@@ -356,6 +356,11 @@ define([
         lambertianDiffuse += '  return baseColor / M_PI;\n';
         lambertianDiffuse += '}\n\n';
 
+        var fresnelSchlick2 = '';
+        fresnelSchlick2 += 'vec3 fresnelSchlick2(vec3 f0, vec3 f90, float VdotH) {\n';
+        fresnelSchlick2 += '  return f0 + (f90 - f0) * pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);\n';
+        fresnelSchlick2 += '}\n\n';
+
         var fresnelSchlick = '';
         fresnelSchlick += 'vec3 fresnelSchlick(float metalness, float VdotH) {\n';
         fresnelSchlick += '  return metalness + (vec3(1.0) - metalness) * pow(1.0 - VdotH, 5.0);\n';
@@ -363,8 +368,8 @@ define([
 
         var smithVisibilityG1 = '';
         smithVisibilityG1 += 'float smithVisibilityG1(float NdotV, float roughness) {\n';
-        smithVisibilityG1 += '  float tanSquared = (1.0 - NdotV * NdotV) / max((NdotV * NdotV), 0.00001);\n';
-        smithVisibilityG1 += '  return 2.0 / (1.0 + sqrt(1.0 + roughness * roughness * tanSquared));\n';
+        smithVisibilityG1 += '  float k = (roughness + 1.0) * (roughness + 1.0) / 8.0;\n';
+        smithVisibilityG1 += '  return NdotV / (NdotV * (1.0 - k) + k);\n';
         smithVisibilityG1 += '}\n\n';
 
         var smithVisibilityGGX = '';
@@ -379,39 +384,42 @@ define([
         GGX += '  return roughnessSquared / (M_PI * f * f);\n';
         GGX += '}\n\n';
 
-        fragmentShader += lambertianDiffuse + fresnelSchlick + smithVisibilityG1 + smithVisibilityGGX + GGX;
+        fragmentShader += lambertianDiffuse + fresnelSchlick2 + fresnelSchlick + smithVisibilityG1 + smithVisibilityGGX + GGX;
 
         var fragmentShaderMain = '';
         fragmentShaderMain += 'void main(void) {\n';
         fragmentShaderMain += '  vec3 baseColor = vec3(1.0, 1.0, 1.0);\n';
-        fragmentShaderMain += '  float metalness = 0.5;\n';
-        fragmentShaderMain += '  float roughness = 1.0;\n';
+        fragmentShaderMain += '  float metalness = 1.0;\n';
+        fragmentShaderMain += '  float roughness = 1.0;\n'; // clamp to min of 0.04
         fragmentShaderMain += '  vec3 v = -normalize(v_positionEC);\n';
         fragmentShaderMain += '  vec3 ambientLight = vec3(0.0, 0.0, 0.0);\n';
 
         // Generate lighting code blocks
         var fragmentLightingBlock = '';
         fragmentLightingBlock += '  vec3 lightColor = vec3(1.0, 1.0, 1.0);\n';
-        fragmentLightingBlock += '  vec3 n = v_normal;\n';
+        fragmentLightingBlock += '  vec3 n = normalize(v_normal);\n';
         fragmentLightingBlock += '  vec3 l = normalize(czm_sunDirectionEC);\n';
         fragmentLightingBlock += '  vec3 h = normalize(v + l);\n';
-        fragmentLightingBlock += '  float NdotL = clamp(dot(n, l), 0.0, 1.0);\n';
-        fragmentLightingBlock += '  float NdotV = clamp(dot(n, v), 0.0, 1.0);\n';
-        fragmentLightingBlock += '  float NdotH = clamp(dot(n, h), 0.0, 1.0);\n';
-        fragmentLightingBlock += '  float LdotH = clamp(dot(l, h), 0.0, 1.0);\n';
-        fragmentLightingBlock += '  float VdotH = clamp(dot(v, h), 0.0, 1.0);\n';
+        fragmentLightingBlock += '  float NdotL = clamp(dot(n, l), 0.01, 1.0);\n';
+        fragmentLightingBlock += '  float NdotV = clamp(dot(n, v), 0.01, 1.0);\n';
+        fragmentLightingBlock += '  float NdotH = clamp(dot(n, h), 0.01, 1.0);\n';
+        fragmentLightingBlock += '  float LdotH = clamp(dot(l, h), 0.01, 1.0);\n';
+        fragmentLightingBlock += '  float VdotH = clamp(dot(v, h), 0.01, 1.0);\n';
 
         fragmentLightingBlock += '  vec3 f0 = vec3(0.04);\n';
-        fragmentLightingBlock += '  vec3 diffuseColor = mix(baseColor.rgb * (1.0 - f0), vec3(0.0), metalness);\n';
+        fragmentLightingBlock += '  vec3 diffuseColor = baseColor * (1.0 - metalness);\n';
         fragmentLightingBlock += '  vec3 specularColor = mix(f0, baseColor, metalness);\n';
         fragmentLightingBlock += '  float reflectance = max(max(specularColor.r, specularColor.g), specularColor.b);\n';
+        fragmentLightingBlock += '  vec3 r90 = vec3(clamp(reflectance * 25.0, 0.0, 1.0));\n';
+        fragmentLightingBlock += '  vec3 r0 = specularColor.rgb;\n';
 
-        fragmentLightingBlock += '  vec3 F = fresnelSchlick(metalness, VdotH);\n';
+        fragmentLightingBlock += '  vec3 F = fresnelSchlick2(r0, r90, VdotH);\n';
+        //fragmentLightingBlock += '  vec3 F = fresnelSchlick(metalness, VdotH);\n';
         fragmentLightingBlock += '  float G = smithVisibilityGGX(roughness, NdotL, NdotV);\n';
         fragmentLightingBlock += '  float D = GGX(roughness, NdotH);\n';
 
         fragmentLightingBlock += '  vec3 diffuseContribution = (1.0 - F) * lambertianDiffuse(baseColor) * NdotL * lightColor;\n';
-        fragmentLightingBlock += '  vec3 specularContribution = M_PI * lightColor * F * G * D / 4.0 * NdotL * NdotV;\n';
+        fragmentLightingBlock += '  vec3 specularContribution = M_PI * lightColor * F * G * D / (4.0 * NdotL * NdotV);\n';
         fragmentLightingBlock += '  vec3 color = diffuseContribution + specularContribution;\n';
 
         if (hasNormals) {
@@ -433,7 +441,6 @@ define([
                 else {
                     fragmentShaderMain += '  vec4 diffuse = u_diffuse;\n';
                 }
-                fragmentShaderMain += '  vec3 diffuseLight = vec3(0.0, 0.0, 0.0);\n';
             }
 
             if (defined(techniqueParameters.transparency)) {
@@ -451,6 +458,7 @@ define([
                 finalColorComputation = '  gl_FragColor = vec4(color, 1.0);\n';
             }
         }
+        //finalColorComputation = '  gl_FragColor = vec4(specularContribution, 1.0);\n';
 
 
         // Add in light computations
