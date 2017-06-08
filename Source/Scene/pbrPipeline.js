@@ -389,15 +389,15 @@ define([
         var fragmentShaderMain = '';
         fragmentShaderMain += 'void main(void) {\n';
         //fragmentShaderMain += '  vec3 baseColor = texture2D(u_diffuse, ' + v_texcoord +').rgb;\n';
-        fragmentShaderMain += '  float metalness = 0.5;\n';
-        fragmentShaderMain += '  float roughness = 0.5;\n'; // clamp to min of 0.04
+        fragmentShaderMain += '  float metalness = 0.7;\n';
+        fragmentShaderMain += '  float roughness = 0.2;\n'; // clamp to min of 0.04
         fragmentShaderMain += '  vec3 v = -normalize(v_positionEC);\n';
         fragmentShaderMain += '  vec3 ambientLight = vec3(0.0, 0.0, 0.0);\n';
 
         // Generate lighting code blocks
         var fragmentLightingBlock = '';
         fragmentLightingBlock += '  vec3 lightColor = vec3(1.0, 1.0, 1.0);\n';
-        fragmentLightingBlock += '  vec3 n = normalize(v_normal);\n';
+        //fragmentLightingBlock += '  vec3 n = normalize(v_normal);\n';
         fragmentLightingBlock += '  vec3 l = normalize(czm_sunDirectionEC);\n';
         fragmentLightingBlock += '  vec3 h = normalize(v + l);\n';
         fragmentLightingBlock += '  float NdotL = clamp(dot(n, l), 0.01, 1.0);\n';
@@ -423,24 +423,26 @@ define([
         fragmentLightingBlock += '  vec3 color = diffuseContribution + specularContribution;\n';
 
         if (hasNormals) {
-            fragmentShaderMain += '  vec3 normal = normalize(v_normal);\n';
+            fragmentShaderMain += '  vec3 ng = normalize(v_normal);\n';
             if (khrMaterialsCommon.doubleSided) {
                 fragmentShaderMain += '  if (gl_FrontFacing == false)\n';
                 fragmentShaderMain += '  {\n';
-                fragmentShaderMain += '    normal = -normal;\n';
+                fragmentShaderMain += '    ng = -ng;\n';
                 fragmentShaderMain += '  }\n';
             }
-            if (defined(khrMaterialsCommon.values.normalMap)) {
+            if (defined(khrMaterialsCommon.values.normalmap)) {
                 // if not provided tangents
-                fragmentShaderMain += '  vec3 pos_dx = dFdx(v_positionEC;\n';
-                fragmentShaderMain += '  vec3 pos_dy = dFdy(v_positionEC;\n';
+                fragmentShader = '#extension GL_OES_standard_derivatives : enable\n' + fragmentShader;
+                fragmentShaderMain += '  vec3 pos_dx = dFdx(v_positionEC);\n';
+                fragmentShaderMain += '  vec3 pos_dy = dFdy(v_positionEC);\n';
                 fragmentShaderMain += '  vec3 tex_dx = dFdx(vec3(' + v_texcoord + ',0.0));\n';
                 fragmentShaderMain += '  vec3 tex_dy = dFdy(vec3(' + v_texcoord + ',0.0));\n';
                 fragmentShaderMain += '  vec3 t = (tex_dy.t * pos_dx - tex_dx.t * pos_dy) / (tex_dx.s * tex_dy.t - tex_dy.s * tex_dx.t);\n';
-                fragmentShaderMain += '  t = normalize(t - n * dot(n, t));\n';
-                fragmentShaderMain += '  vec3 b = normalize(cross(n, t));\n';
-                fragmentShaderMain += '  mat3 tbn = mat3(t, b, n);\n';
-                fragmentShaderMain += '  n = texture2D(u_normalmap, ' + v_texcoord + ').rgb';
+                fragmentShaderMain += '  t = normalize(t - ng * dot(ng, t));\n';
+                fragmentShaderMain += '  vec3 b = normalize(cross(ng, t));\n';
+                fragmentShaderMain += '  mat3 tbn = mat3(t, b, ng);\n';
+                fragmentShaderMain += '  vec3 n = texture2D(u_normalmap, ' + v_texcoord + ').rgb;\n';
+                fragmentShaderMain += '  n = normalize(tbn * (2.0 * n - 1.0));\n';
             }
         }
 
@@ -578,7 +580,7 @@ define([
                 return WebGLConstants.FLOAT;
             case 'transparency':
                 return WebGLConstants.FLOAT;
-            case 'normalMap':
+            case 'normalmap':
                 return (value instanceof String || typeof value === 'string') ? WebGLConstants.SAMPLER_2D : WebGLConstants.FLOAT_VEC4;
 
             // these two are usually not used directly within shaders,

@@ -326,15 +326,15 @@
                     "technique": "BLINN",
                     "transparent": false,
                     "values": {
-                    "diffuse": "texture_m0mtl_barramundi_fish-diffuse-image",
-                    "shininess": 256,
-                    "specular": [
-                        0.20000000298023224,
-                        0.20000000298023224,
-                        0.20000000298023224,
-                        1
-                    ],
-                    "normalMap": "texture_m0mtl_barramundi_fish-normal-image"
+                        "diffuse": "texture_m0mtl_barramundi_fish-diffuse-image",
+                        "shininess": 256,
+                        "specular": [
+                            0.20000000298023224,
+                            0.20000000298023224,
+                            0.20000000298023224,
+                            1
+                        ],
+                        "normalmap": "texture_m0mtl_barramundi_fish-normal-image"
                     }
                 }
             },
