@@ -388,9 +388,9 @@ define([
 
         var fragmentShaderMain = '';
         fragmentShaderMain += 'void main(void) {\n';
-        fragmentShaderMain += '  vec3 baseColor = vec3(1.0, 1.0, 1.0);\n';
-        fragmentShaderMain += '  float metalness = 1.0;\n';
-        fragmentShaderMain += '  float roughness = 1.0;\n'; // clamp to min of 0.04
+        //fragmentShaderMain += '  vec3 baseColor = texture2D(u_diffuse, ' + v_texcoord +').rgb;\n';
+        fragmentShaderMain += '  float metalness = 0.5;\n';
+        fragmentShaderMain += '  float roughness = 0.5;\n'; // clamp to min of 0.04
         fragmentShaderMain += '  vec3 v = -normalize(v_positionEC);\n';
         fragmentShaderMain += '  vec3 ambientLight = vec3(0.0, 0.0, 0.0);\n';
 
@@ -430,24 +430,37 @@ define([
                 fragmentShaderMain += '    normal = -normal;\n';
                 fragmentShaderMain += '  }\n';
             }
+            if (defined(khrMaterialsCommon.values.normalMap)) {
+                // if not provided tangents
+                fragmentShaderMain += '  vec3 pos_dx = dFdx(v_positionEC;\n';
+                fragmentShaderMain += '  vec3 pos_dy = dFdy(v_positionEC;\n';
+                fragmentShaderMain += '  vec3 tex_dx = dFdx(vec3(' + v_texcoord + ',0.0));\n';
+                fragmentShaderMain += '  vec3 tex_dy = dFdy(vec3(' + v_texcoord + ',0.0));\n';
+                fragmentShaderMain += '  vec3 t = (tex_dy.t * pos_dx - tex_dx.t * pos_dy) / (tex_dx.s * tex_dy.t - tex_dy.s * tex_dx.t);\n';
+                fragmentShaderMain += '  t = normalize(t - n * dot(n, t));\n';
+                fragmentShaderMain += '  vec3 b = normalize(cross(n, t));\n';
+                fragmentShaderMain += '  mat3 tbn = mat3(t, b, n);\n';
+                fragmentShaderMain += '  n = texture2D(u_normalmap, ' + v_texcoord + ').rgb';
+            }
         }
 
         var finalColorComputation;
         if (lightingModel !== 'CONSTANT') {
             if (defined(techniqueParameters.diffuse)) {
                 if (techniqueParameters.diffuse.type === WebGLConstants.SAMPLER_2D) {
-                    fragmentShaderMain += '  vec4 diffuse = texture2D(u_diffuse, ' + v_texcoord + ');\n';
+                    fragmentShaderMain += '  vec3 baseColor = texture2D(u_diffuse, ' + v_texcoord + ').rgb;\n';
                 }
                 else {
-                    fragmentShaderMain += '  vec4 diffuse = u_diffuse;\n';
+                    fragmentShaderMain += '  vec3 baseColor = u_diffuse.rgb;\n';
                 }
             }
 
             if (defined(techniqueParameters.transparency)) {
-                finalColorComputation = '  gl_FragColor = vec4(color * diffuse.a, diffuse.a * u_transparency);\n';
+                //finalColorComputation = '  gl_FragColor = vec4(color * diffuse.a, diffuse.a * u_transparency);\n';
             }
             else {
-                finalColorComputation = '  gl_FragColor = vec4(color * diffuse.a, diffuse.a);\n';
+                //finalColorComputation = '  gl_FragColor = vec4(color * diffuse.a, diffuse.a);\n';
+                finalColorComputation = '  gl_FragColor = vec4(color, 1.0);\n';
             }
         }
         else {
@@ -565,6 +578,8 @@ define([
                 return WebGLConstants.FLOAT;
             case 'transparency':
                 return WebGLConstants.FLOAT;
+            case 'normalMap':
+                return (value instanceof String || typeof value === 'string') ? WebGLConstants.SAMPLER_2D : WebGLConstants.FLOAT_VEC4;
 
             // these two are usually not used directly within shaders,
             // they are just added here for completeness
